@@ -1,0 +1,120 @@
+1. Connection 객체와 Connection Pool
+	-- 자바의 DB 개발 표준은 JDBC
+	-- 우리는 마이바티스로 JDBC 코드를 생성한다.
+	-- JDBC 에서 DB 와의 연결을 Connection 객체라고 한다.
+	-- 필요할 때마다 연결을 만들고 파괴하는 것은 비싸다
+		=> 미리 연결을 만들어놓고 빌려서 사용하고 반납하자.
+	-- 아파치 DBCP2, 스프링 부트의 Hikari CP 등이 있다.
+
+2. 프로그램의 작동 상태들을 적어두는 것을 "Logging" 이라고 한다.
+   로깅을 위한 자바 표준 : SLF4J
+   스프링이 사용하는 SLF4J 구현체 : LogBack
+   JUnit, SLF4J, LogBack, Jackson 은 스프링 부트 프로젝트에 포함되어 있다.
+   
+   -- 표준이 있고 구현체가 있다 => 디자인 패턴 Facade (퍼사드) 패턴
+   
+3. SLF4J 는 어떻게 동작하는가
+	-- 로깅 레벨 : trace, debug, [info], warn, error
+	-- 보통은 info 로 지정한다.
+	
+4. JDBC 는 로깅이 안된다 => 로깅하려면 log4jdbc 를 설치해야 한다.
+
+5. builder 는 객체 생성의 난해함을 덜어주는 패턴이다.
+	클래스 학생 : 학교, 이름, 주소, 연락처, 이메일
+	new 학생("홍길동", "서울시", "010-1111", "a@a.com", "학익고");
+	학생.builder().이름("홍길동").주소("서울시"). . .build();
+	
+6. @Builder 는 모든 필드 생성자를 내부적으로 추가하여 작업한다.
+	 그런데 스프링이나 마이바티스는 기본 생성자를 요구한다 => 에러 발생
+	 그래서 @Builder 는
+	 @AllArgsConstructor, @NoArgsConstructor 와 같이 다닌다.
+	 
+7. 스프링이 생성한 객체를 스프링 빈 (bean)이라고 한다.
+	 스프링 빈은 기본 생성자가 있어야만 한다.
+	 
+8. 스프링을 사용하는 이유
+	-- 의존성 주입 : 개발자는 사용할 객체를 스프링에게 요청
+				 (Inversion of Control, 제어 역전)
+	-- AOP : 횡단 관심을 컴포넌트화
+	
+9. 스프링 컨테이너
+	-- 컨테이너를 대표하는 클래스 : ApplicationContext 가
+							빈을 생성, 관리, 주입한다.
+	-- Component Scan : Context 가 빈을 생성
+		@Component, @Controller, @Service, @Repository
+		마이바티스 DAO 객체는 [스프링이 아닌 마이바티스가 생성] 하여
+		스프링에 등록 => @Mapper
+
+10. DB 사용자 계정 생성
+	-- 데이터 정의어 (DDL) : create, alter, drop
+	-- 데이터 조작어 (DML) : create, select, update, delete
+	-- 데이터 제의어 (DCL) : commit, rollback, grant, revoke
+
+	create user zexample5 identified by 1234;
+	
+   Role 부여
+   	-- grant connect, resource to zexample5;
+   	
+11. 프로젝트 생성
+	-- 패키지 지정 => Component Scan
+	-- 라이브러리
+		Lombok
+		DevTools
+		Oracle Driver - 자바와 DB 를 연결하는 프로그램 (Driver)
+		MyBatis - 자바로 DB 작업을 수행하는 표준이 JDBC
+				  => MyBatis 를 사용하겠다.
+		Spring Web
+	-- 수동으로 추가할 라이브러리
+		JSTL - 톰캣 9는 1.2를 사용, 톰캣 10은 3.0을 사용해야 한다.
+		톰캣 JSP 지원
+		
+12. application.properties 설정
+	-- port 변경
+	-- 오라클 연결 설정
+	-- JSP 폴더 설정
+	-- DB 연결이 되는지 테스트
+	
+13. 사용자 계정에서 작업
+	create table todos (
+	    tno number(4) primary key,
+	    job varchar2(100 char),
+	    writeday date,
+	    -- 오라클은 boolean 타입이 없다.
+	    -- 오라클은 number(1) 로 boolean 처리할 수 있다.
+	    -- 마이바티스가 1/0 <-> true/false 로 변환해준다.
+	    finish number(1)
+	);
+	
+	-- 오라클에서 일련번호는 sequence
+	-- 1 => 2 => 3 다음에 3번글 삭제 후 새 글을 작성하면 - 4번
+	
+14. 엔티티 작성
+	-- entity 는 테이블과 1:1 대응하는 클래스이다.
+	create sequence todos_seq;
+	
+15. DAO 를 작성하고 테스트
+	DAO 의 메서드 이름을 JPA 에서 자바 표준으로 만들어놓은 이름들이 있다.
+	
+	-- JDBC 에서 insert, update, delete 의 실행 결과는 정수이다.
+	-- 추가한 행의 개수, 변경된 행의 개수, 삭제된 행의 개수
+	
+	-- C public Long save(ToDo toDo)
+	insert into todos(tno, job, writeday, finish) values(todos_seq.nextval, #{job}, sysdate, 0)
+	
+	-- R public List<ToDo> findAll()
+	select * from todos
+	
+	-- U X => public Long Update(Long tno) (없음)
+		: finish 를 true <-> false
+	update todos set finish=(finish-1)*-1 where tno=#{tno}
+	
+	-- D public Long delete(Long tno)
+	delete from todos where tno=#{tno}
+	
+16. JSP EL
+	-- 객체를 출력하기 위한 간단한 표현
+	-- ${todo} : 화면에 todo 를 출력하라 (JSP 로는 out.println(todo)) )
+	-- ${todo.tno} : 화면에 todo.getTno() 의 값을 출력하가
+					 getTno() 가 없으면 NO GETTER 에러 발생
+	-- 실수로 ${todo.no} => todo.getNo()
+	   => Getter 가 없다는 에러 발생
